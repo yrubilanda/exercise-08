@@ -1,0 +1,103 @@
+---
+title: "exercise-08"
+format: html
+---
+
+### Step 1
+
+```{r}
+library(tidyverse)
+library(readr)
+library(skimr)
+```
+```{r}
+f <- "https://raw.githubusercontent.com/difiore/ada-datasets/main/Street_et_al_2017.csv" #assign file to variable f
+
+d <- read_csv(f, col_names = TRUE) #read csv file f and assign to variable d
+```
+```{r}
+#https://cran.r-project.org/web/packages/skimr/vignettes/skimr.html
+skim(d)
+```
+```{r}
+skim(d)
+```
+```{r}
+# Create scatterplots of ECV vs. other variables
+p1 <- ggplot(d, aes(x = Group_size, y = ECV)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "violetred") +
+  labs(title = "Brain Size (ECV) vs. Social Group Size", x = "Social Group Size", y = "Brain Size (ECV)")
+
+p2 <- ggplot(d, aes(x = Longevity, y = ECV)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "violetred") +
+  labs(title = "Brain Size (ECV) vs. Longevity", x = "Longevity (months)", y = "Brain Size (ECV)")
+
+p3 <- ggplot(d, aes(x = Weaning, y = ECV)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "violetred") +
+  labs(title = "Brain Size (ECV) vs. Juvenile Period Length", x = "Weaning (days)", y = "Brain Size (ECV)")
+
+p4 <- ggplot(d, aes(x = Repro_lifespan, y = ECV)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "violetred") +
+  labs(title = "Brain Size (ECV) vs. Reproductive Lifespan", x = "Reproductive Lifespan (months)", y = "Brain Size (ECV)")
+
+p1
+p2
+p3
+p4
+```
+
+### Step 3
+```{r}
+# Remove rows with missing values in ECV or Group_size
+d_clean <- na.omit(d[, c("ECV", "Group_size")])
+
+# Compute means
+x_bar <- mean(d_clean$Group_size)
+y_bar <- mean(d_clean$ECV)
+
+# Compute slope (β1)
+beta_1 <- (sum((d_clean$Group_size - x_bar) * (d_clean$ECV - y_bar)))/(sum((d_clean$Group_size - x_bar)^2))
+
+# Compute intercept (β0)
+beta_0 <- y_bar - beta_1 * x_bar
+
+beta_1
+beta_0
+```
+### Step 4
+```{r}
+# Run the linear regression model using lm()
+model_lm <- lm(ECV ~ Group_size, data = d_clean)
+
+model_lm
+```
+### Step 5
+
+```{r}
+# Filter data for each taxonomic group, removing missing values
+d_catarrhine <- na.omit(d[d$Taxonomic_group == "Catarrhini", c("ECV", "Group_size")])
+d_platyrrhine <- na.omit(d[d$Taxonomic_group == "Platyrrhini", c("ECV", "Group_size")])
+d_strepsirhine <- na.omit(d[d$Taxonomic_group == "Strepsirhini", c("ECV", "Group_size")])
+
+# Run linear regression models for each group
+model_catarrhine <- lm(ECV ~ Group_size, data = d_catarrhine)
+model_platyrrhine <- lm(ECV ~ Group_size, data = d_platyrrhine)
+model_strepsirhine <- lm(ECV ~ Group_size, data = d_strepsirhine)
+
+model_catarrhine
+model_platyrrhine
+model_strepsirhine
+```
+
+```{r}
+#Fit an ANCOVA model with interaction
+ancova_model <- lm(ECV ~ Group_size * Taxonomic_group, data = d_clean)
+ 
+summary(ancova_model)
+```
+
+β₁ tells us how much brain sez increases when social group size increases by 1.So, yes, the regression coefficients differ among taxonomic groups, with Platyrrhines having the steepest slope (1.965), followed by Strepsirhines (1.841) and Catarrhines (1.146), indicating that brain size increases more rapidly with group size in Platyrrhines. The β₀ represents absolute brain size, where Catarrhines generally have larger brains. An ANCOVA test can confirm if these differences are statistically significant as opposed to just have random numbers. 

@@ -93,11 +93,132 @@ model_platyrrhine
 model_strepsirhine
 ```
 
+
+
+β₁ tells us how much brain size increases when social group size increases by 1.So, yes, the regression coefficients differ among taxonomic groups, with Platyrrhines having the steepest slope (1.965), followed by Strepsirhines (1.841) and Catarrhines (1.146), indicating that brain size increases more rapidly with group size in Platyrrhines. The β₀ represents absolute brain size, where Catarrhines generally have larger brains.
+
+### Step 6
 ```{r}
-#Fit an ANCOVA model with interaction
-ancova_model <- lm(ECV ~ Group_size * Taxonomic_group, data = d_clean)
- 
-summary(ancova_model)
+# Compute residuals
+d_clean <- na.omit(d[, c("ECV", "Group_size")])
+n <- nrow(d_clean)
+x <- d_clean$Group_size
+y <- d_clean$ECV
+
+# Means
+x_bar <- mean(x)
+y_bar <- mean(y)
+
+# Compute slope (β1) and intercept (β0)
+beta_1 <- sum((x - x_bar) * (y - y_bar)) / sum((x - x_bar)^2)
+beta_0 <- y_bar - beta_1 * x_bar
+
+# Compute residuals
+y_pred <- beta_0 + beta_1 * x
+residuals <- y - y_pred
+
+# Compute residual standard error
+s <- sqrt(sum(residuals^2) / (n - 2))
+
+# Compute SE of beta_1
+SE_beta_1 <- s / sqrt(sum((x - x_bar)^2))
+
+# Compute 95% CI
+t_value <- qt(0.975, df = n - 2)  # 95% confidence, two-tailed
+CI_lower <- beta_1 - t_value * SE_beta_1
+CI_upper <- beta_1 + t_value * SE_beta_1
+
+# Compute t-statistic and p-value
+t_stat <- beta_1 / SE_beta_1
+p_value <- 2 * pt(-abs(t_stat), df = n - 2)
+
+# Display results
+list(
+  beta_1 = beta_1,
+  SE_beta_1 = SE_beta_1,
+  CI_95 = c(CI_lower, CI_upper),
+  t_stat = t_stat,
+  p_value = p_value
+)
+```
+### Step 7
+```{r}
+
+# Compute the observed slope from the actual (unpermuted) data
+model_lm <- lm(ECV ~ Group_size, data = d_clean)
+obs_beta_1 <- coef(model_lm)["Group_size"]  # Store the observed slope
+
+# Number of permutations
+n_perm <- 1000
+perm_slopes <- numeric(n_perm)
+
+for (i in 1:n_perm) {
+  d_permuted <- d_clean  # Copy data
+  d_permuted$ECV <- sample(d_permuted$ECV)  # Shuffle ECV values randomly
+  
+  perm_model <- lm(ECV ~ Group_size, data = d_permuted)
+  perm_slopes[i] <- coef(perm_model)["Group_size"]  # Store slope
+}
+
+# Compute p-value using the quantile method
+p_value_quantile <- mean(abs(perm_slopes) >= abs(obs_beta_1))
+
+# Compute p-value using the theory-based method
+perm_sd <- sd(perm_slopes)
+t_stat_perm <- obs_beta_1 / perm_sd
+p_value_theory <- 2 * pt(-abs(t_stat_perm), df = nrow(d_clean) - 2)
+
+# Visualizing the null distribution
+hist(perm_slopes, breaks = 30, col = "lightsteelblue1", main = "Null Distribution of Slopes", 
+     xlab = "Slope Coefficient", ylab = "Frequency")
+abline(v = obs_beta_1, col = "violetred", lwd = 2, lty = 2)  # Observed slope
+
+# Output results
+list(
+  observed_slope = obs_beta_1,
+  p_value_quantile = p_value_quantile,
+  p_value_theory = p_value_theory
+)
 ```
 
-β₁ tells us how much brain sez increases when social group size increases by 1.So, yes, the regression coefficients differ among taxonomic groups, with Platyrrhines having the steepest slope (1.965), followed by Strepsirhines (1.841) and Catarrhines (1.146), indicating that brain size increases more rapidly with group size in Platyrrhines. The β₀ represents absolute brain size, where Catarrhines generally have larger brains. An ANCOVA test can confirm if these differences are statistically significant as opposed to just have random numbers. 
+What to permute? Shuffle ECV values while keeping Group_size fixed.
+Why? This removes any real relationship between the variables.
+P-value (quantile method)? The proportion of permuted slopes as extreme or more extreme than the observed slope.
+P-value (theory-based method)? Uses the standard deviation of the permuted slopes to calculate a t-statistic and p-value.
+Significance? If p < 0.05, the relationship is likely real. If p > 0.05, it may be due to chance.
+
+```{r}
+# Number of bootstrap samples
+n_boot <- 1000
+boot_slopes <- numeric(n_boot)
+
+# Perform bootstrapping
+for (i in 1:n_boot) {
+  boot_sample <- d_clean[sample(nrow(d_clean), replace = TRUE), ]  # Resample with replacement
+  boot_model <- lm(ECV ~ Group_size, data = boot_sample)  # Fit model
+  boot_slopes[i] <- coef(boot_model)["Group_size"]  # Store slope
+}
+
+# Compute 95% CI using the Quantile Method
+CI_quantile <- quantile(boot_slopes, c(0.025, 0.975))
+
+# Compute 95% CI using the Theory-Based Method
+boot_se <- sd(boot_slopes)
+CI_theory <- c(obs_beta_1 - 1.96 * boot_se, obs_beta_1 + 1.96 * boot_se)
+
+# Plot bootstrapped distribution
+hist(boot_slopes, breaks = 30, col = "lightsteelblue1", main = "Bootstrap Distribution of Slope Coefficients",
+     xlab = "Slope Coefficient", ylab = "Frequency")
+abline(v = obs_beta_1, col = "violetred", lwd = 2, lty = 2)  # Observed slope
+abline(v = CI_quantile, col = "royalblue4", lwd = 2, lty = 3)  # 95% CI from quantiles
+
+# Output results
+list(
+  observed_slope = obs_beta_1,
+  CI_quantile = CI_quantile,
+  CI_theory = CI_theory,
+  zero_in_CI_quantile = CI_quantile[1] <= 0 & CI_quantile[2] >= 0,
+  zero_in_CI_theory = CI_theory[1] <= 0 & CI_theory[2] >= 0
+)
+```
+Yes, both confidence intervals do not include zero, which suggests that the slope coefficient is significantly different from zero. This means that group size is likely a meaningful predictor of ECV and the relationship is not due to random chance.
